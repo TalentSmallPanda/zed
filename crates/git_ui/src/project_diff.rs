@@ -77,6 +77,8 @@ pub struct ProjectDiff {
     review_comment_count: usize,
     _task: Task<Result<()>>,
     _subscription: Subscription,
+    filter_path: Option<RepoPath>, // 新增：用来存你点击的那个文件路径
+    move_to_first_hunk_on_next_frame: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -211,6 +213,16 @@ impl ProjectDiff {
             .find(|item| matches!(item.read(cx).diff_base(cx), DiffBase::Head));
         let project_diff = if let Some(existing) = existing {
             existing.update(cx, |project_diff, cx| {
+                // --- 核心修复：更新过滤器为当前点击的新文件 ---
+                project_diff.filter_path = entry.as_ref().map(|e| e.repo_path.clone());
+
+                // --- 核心修复：手动触发一次刷新，让它加载新文件 ---
+                project_diff._task = window.spawn(cx, {
+                    let this = cx.weak_entity();
+                    async move |cx| Self::refresh(this, RefreshReason::StatusesChanged, cx).await
+                });
+                // ------------------------------------------
+
                 project_diff.move_to_beginning(window, cx);
             });
 
@@ -218,8 +230,19 @@ impl ProjectDiff {
             existing
         } else {
             let workspace_handle = cx.entity();
-            let project_diff =
-                cx.new(|cx| Self::new(workspace.project().clone(), workspace_handle, window, cx));
+            // --- 核心修改：从 entry 里拿到路径 ---
+            let filter_path = entry.as_ref().map(|e| e.repo_path.clone());
+
+            let project_diff = cx.new(|cx| {
+                // 将 filter_path 传给 new
+                Self::new(
+                    workspace.project().clone(),
+                    workspace_handle,
+                    filter_path, // <--- 传进去
+                    window,
+                    cx,
+                )
+            });
             workspace.add_item_to_active_pane(
                 Box::new(project_diff.clone()),
                 None,
@@ -253,36 +276,36 @@ impl ProjectDiff {
         }
     }
 
-    pub fn deploy_at_project_path(
-        workspace: &mut Workspace,
-        project_path: ProjectPath,
-        window: &mut Window,
-        cx: &mut Context<Workspace>,
-    ) {
-        telemetry::event!("Git Diff Opened", source = "Agent Panel");
-        let existing = workspace
-            .items_of_type::<Self>(cx)
-            .find(|item| matches!(item.read(cx).diff_base(cx), DiffBase::Head));
-        let project_diff = if let Some(existing) = existing {
-            workspace.activate_item(&existing, true, true, window, cx);
-            existing
-        } else {
-            let workspace_handle = cx.entity();
-            let project_diff =
-                cx.new(|cx| Self::new(workspace.project().clone(), workspace_handle, window, cx));
-            workspace.add_item_to_active_pane(
-                Box::new(project_diff.clone()),
-                None,
-                true,
-                window,
-                cx,
-            );
-            project_diff
-        };
-        project_diff.update(cx, |project_diff, cx| {
-            project_diff.move_to_project_path(&project_path, window, cx);
-        });
-    }
+    // pub fn deploy_at_project_path(
+    //     workspace: &mut Workspace,
+    //     project_path: ProjectPath,
+    //     window: &mut Window,
+    //     cx: &mut Context<Workspace>,
+    // ) {
+    //     telemetry::event!("Git Diff Opened", source = "Agent Panel");
+    //     let existing = workspace
+    //         .items_of_type::<Self>(cx)
+    //         .find(|item| matches!(item.read(cx).diff_base(cx), DiffBase::Head));
+    //     let project_diff = if let Some(existing) = existing {
+    //         workspace.activate_item(&existing, true, true, window, cx);
+    //         existing
+    //     } else {
+    //         let workspace_handle = cx.entity();
+    //         let project_diff =
+    //             cx.new(|cx| Self::new(workspace.project().clone(), workspace_handle, window, cx));
+    //         workspace.add_item_to_active_pane(
+    //             Box::new(project_diff.clone()),
+    //             None,
+    //             true,
+    //             window,
+    //             cx,
+    //         );
+    //         project_diff
+    //     };
+    //     project_diff.update(cx, |project_diff, cx| {
+    //         project_diff.move_to_project_path(&project_path, window, cx);
+    //     });
+    // }
 
     pub fn autoscroll(&self, cx: &mut Context<Self>) {
         self.editor.update(cx, |editor, cx| {
@@ -318,7 +341,7 @@ impl ProjectDiff {
                 )
             })?;
             cx.new_window_entity(|window, cx| {
-                Self::new_impl(branch_diff, project, workspace, window, cx)
+                Self::new_impl(branch_diff, project, workspace, None, window, cx)
             })
         })
     }
@@ -326,18 +349,20 @@ impl ProjectDiff {
     fn new(
         project: Entity<Project>,
         workspace: Entity<Workspace>,
+        filter_path: Option<RepoPath>, // <--- 增加这个参数
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
         let branch_diff =
             cx.new(|cx| branch_diff::BranchDiff::new(DiffBase::Head, project.clone(), window, cx));
-        Self::new_impl(branch_diff, project, workspace, window, cx)
+        Self::new_impl(branch_diff, project, workspace, filter_path, window, cx)
     }
 
     fn new_impl(
         branch_diff: Entity<branch_diff::BranchDiff>,
         project: Entity<Project>,
         workspace: Entity<Workspace>,
+        filter_path: Option<RepoPath>, // <--- 增加这个参数
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
@@ -437,6 +462,7 @@ impl ProjectDiff {
             focus_handle,
             editor,
             multibuffer,
+            filter_path, // <--- 插入这一行进行初始化
             buffer_diff_subscriptions: Default::default(),
             pending_scroll: None,
             review_comment_count: 0,
@@ -445,6 +471,7 @@ impl ProjectDiff {
                 branch_diff_subscription,
                 Subscription::join(editor_subscription, review_comment_subscription),
             ),
+            move_to_first_hunk_on_next_frame: false,
         }
     }
 
@@ -508,6 +535,16 @@ impl ProjectDiff {
         })
     }
 
+    /// 移动到第一个 diff hunk
+    pub fn move_to_first_hunk(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.editor.update(cx, |editor, cx| {
+            editor.rhs_editor().update(cx, |editor, cx| {
+                editor.go_to_first_diff_hunk(&GoToHunk, window, cx);
+            });
+        });
+    }
+
+    /// 移动到文件开头
     fn move_to_beginning(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.editor.update(cx, |editor, cx| {
             editor.rhs_editor().update(cx, |editor, cx| {
@@ -682,28 +719,29 @@ impl ProjectDiff {
         let snapshot = buffer.read(cx).snapshot();
         let diff_snapshot = diff.read(cx).snapshot(cx);
 
-        let excerpt_ranges = {
-            let diff_hunk_ranges = diff_snapshot
-                .hunks_intersecting_range(
-                    Anchor::min_max_range_for_buffer(snapshot.remote_id()),
-                    &snapshot,
-                )
-                .map(|diff_hunk| diff_hunk.buffer_range.to_point(&snapshot));
-            let conflicts = conflict_addon
-                .conflict_set(snapshot.remote_id())
-                .map(|conflict_set| conflict_set.read(cx).snapshot().conflicts)
-                .unwrap_or_default();
-            let mut conflicts = conflicts
-                .iter()
-                .map(|conflict| conflict.range.to_point(&snapshot))
-                .peekable();
+        // let excerpt_ranges = {
+        //     let diff_hunk_ranges = diff_snapshot
+        //         .hunks_intersecting_range(
+        //             Anchor::min_max_range_for_buffer(snapshot.remote_id()),
+        //             &snapshot,
+        //         )
+        //         .map(|diff_hunk| diff_hunk.buffer_range.to_point(&snapshot));
+        //     let conflicts = conflict_addon
+        //         .conflict_set(snapshot.remote_id())
+        //         .map(|conflict_set| conflict_set.read(cx).snapshot().conflicts)
+        //         .unwrap_or_default();
+        //     let mut conflicts = conflicts
+        //         .iter()
+        //         .map(|conflict| conflict.range.to_point(&snapshot))
+        //         .peekable();
 
-            if conflicts.peek().is_some() {
-                conflicts.collect::<Vec<_>>()
-            } else {
-                diff_hunk_ranges.collect()
-            }
-        };
+        //     if conflicts.peek().is_some() {
+        //         conflicts.collect::<Vec<_>>()
+        //     } else {
+        //         diff_hunk_ranges.collect()
+        //     }
+        // };
+        let excerpt_ranges = vec![language::Point::new(0, 0)..snapshot.max_point()];
 
         let mut needs_fold = None;
 
@@ -772,10 +810,19 @@ impl ProjectDiff {
     ) -> Result<()> {
         let mut path_keys = Vec::new();
         let buffers_to_load = this.update(cx, |this, cx| {
-            let (repo, buffers_to_load) = this.branch_diff.update(cx, |branch_diff, cx| {
+            let (repo, mut buffers_to_load) = this.branch_diff.update(cx, |branch_diff, cx| {
                 let load_buffers = branch_diff.load_buffers(cx);
                 (branch_diff.repo().cloned(), load_buffers)
             });
+
+            // 如果有 filter_path，只保留匹配的文件；否则过滤掉所有文件（显示空）
+            if let Some(filter) = &this.filter_path {
+                // 过滤掉所有不符合路径的文件
+                buffers_to_load.retain(|entry| &entry.repo_path == filter);
+            } else {
+                // 没有指定文件，清空所有文件（显示空状态）
+                buffers_to_load.clear();
+            }
             let mut previous_buffers = this
                 .multibuffer
                 .read(cx)
@@ -868,6 +915,12 @@ impl ProjectDiff {
             this.pending_scroll.take();
             cx.notify();
         })?;
+
+        // 刷新完成后，标记需要移动到第一个 hunk
+        this.update(cx, |this, cx| {
+            this.move_to_first_hunk_on_next_frame = true;
+            cx.notify();
+        }).ok();
 
         Ok(())
     }
@@ -1014,22 +1067,22 @@ impl Item for ProjectDiff {
         true
     }
 
-    fn clone_on_split(
-        &self,
-        _workspace_id: Option<workspace::WorkspaceId>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Task<Option<Entity<Self>>>
-    where
-        Self: Sized,
-    {
-        let Some(workspace) = self.workspace.upgrade() else {
-            return Task::ready(None);
-        };
-        Task::ready(Some(cx.new(|cx| {
-            ProjectDiff::new(self.project.clone(), workspace, window, cx)
-        })))
-    }
+    // fn clone_on_split(
+    //     &self,
+    //     _workspace_id: Option<workspace::WorkspaceId>,
+    //     window: &mut Window,
+    //     cx: &mut Context<Self>,
+    // ) -> Task<Option<Entity<Self>>>
+    // where
+    //     Self: Sized,
+    // {
+    //     let Some(workspace) = self.workspace.upgrade() else {
+    //         return Task::ready(None);
+    //     };
+    //     Task::ready(Some(cx.new(|cx| {
+    //         ProjectDiff::new(self.project.clone(), workspace, window, cx)
+    //     })))
+    // }
 
     fn is_dirty(&self, cx: &App) -> bool {
         self.multibuffer.read(cx).is_dirty(cx)
@@ -1110,7 +1163,13 @@ impl Item for ProjectDiff {
 }
 
 impl Render for ProjectDiff {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // 处理刷新完成后移动到第一个 diff 的请求
+        if self.move_to_first_hunk_on_next_frame {
+            self.move_to_first_hunk_on_next_frame = false;
+            self.move_to_first_hunk(window, cx);
+        }
+
         let is_empty = self.multibuffer.read(cx).is_empty();
         let is_branch_diff_view = matches!(self.diff_base(cx), DiffBase::Merge { .. });
 
@@ -1206,9 +1265,9 @@ impl SerializableItem for ProjectDiff {
                 let branch_diff = cx
                     .new(|cx| branch_diff::BranchDiff::new(diff_base, project.clone(), window, cx));
                 let workspace = workspace.upgrade().context("workspace gone")?;
-                anyhow::Ok(
-                    cx.new(|cx| ProjectDiff::new_impl(branch_diff, project, workspace, window, cx)),
-                )
+                anyhow::Ok(cx.new(|cx| {
+                    ProjectDiff::new_impl(branch_diff, project, workspace, None, window, cx)
+                }))
             })??;
 
             Ok(diff)
@@ -1791,7 +1850,7 @@ mod tests {
             cx.add_window_view(|window, cx| MultiWorkspace::test_new(project.clone(), window, cx));
         let workspace = multi_workspace.read_with(cx, |mw, _| mw.workspace().clone());
         let diff = cx.new_window_entity(|window, cx| {
-            ProjectDiff::new(project.clone(), workspace, window, cx)
+            ProjectDiff::new(project.clone(), workspace, None, window, cx)
         });
         cx.run_until_parked();
 
@@ -1840,7 +1899,7 @@ mod tests {
             cx.add_window_view(|window, cx| MultiWorkspace::test_new(project.clone(), window, cx));
         let workspace = multi_workspace.read_with(cx, |mw, _| mw.workspace().clone());
         let diff = cx.new_window_entity(|window, cx| {
-            ProjectDiff::new(project.clone(), workspace, window, cx)
+            ProjectDiff::new(project.clone(), workspace, None, window, cx)
         });
         cx.run_until_parked();
 
@@ -1926,7 +1985,7 @@ mod tests {
             Editor::for_buffer(buffer, Some(project.clone()), window, cx)
         });
         let diff = cx.new_window_entity(|window, cx| {
-            ProjectDiff::new(project.clone(), workspace, window, cx)
+            ProjectDiff::new(project.clone(), workspace, None, window, cx)
         });
         cx.run_until_parked();
 
@@ -2214,7 +2273,7 @@ mod tests {
             cx.add_window_view(|window, cx| MultiWorkspace::test_new(project.clone(), window, cx));
         let workspace = multi_workspace.read_with(cx, |mw, _| mw.workspace().clone());
         let diff = cx.new_window_entity(|window, cx| {
-            ProjectDiff::new(project.clone(), workspace, window, cx)
+            ProjectDiff::new(project.clone(), workspace, None, window, cx)
         });
         cx.run_until_parked();
 
@@ -2454,7 +2513,7 @@ mod tests {
             cx.add_window_view(|window, cx| MultiWorkspace::test_new(project.clone(), window, cx));
         let workspace = multi_workspace.read_with(cx, |mw, _| mw.workspace().clone());
         let diff = cx.new_window_entity(|window, cx| {
-            ProjectDiff::new(project.clone(), workspace, window, cx)
+            ProjectDiff::new(project.clone(), workspace, None, window, cx)
         });
         cx.run_until_parked();
 

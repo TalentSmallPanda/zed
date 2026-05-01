@@ -1,4 +1,6 @@
 [build]
+jobs = 1
+incremental = false
 # v0 mangling scheme provides more detailed backtraces around closures
 rustflags = ["-C", "symbol-mangling-version=v0", "--cfg", "tokio_unstable"]
 
@@ -14,6 +16,8 @@ rustflags = [
     "windows_slim_errors",        # This cfg will reduce the size of `windows::core::Error` from 16 bytes to 4 bytes
     "-C",
     "target-feature=+crt-static", # This fixes the linking issue when compiling livekit on Windows
+    "-C",
+    "codegen-units=1",
 ]
 
 # We need lld to link libwebrtc.a successfully on aarch64-linux

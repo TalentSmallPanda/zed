@@ -18270,6 +18270,7 @@ impl Editor {
         })
     }
 
+    // todo -- git多文件缓冲区展开函数
     pub(crate) fn expand_excerpt(
         &mut self,
         excerpt_anchor: Anchor,
@@ -18487,6 +18488,19 @@ impl Editor {
         self.go_to_hunk_before_or_after_position(
             &snapshot,
             selection.head(),
+            Direction::Next,
+            true,
+            window,
+            cx,
+        );
+    }
+
+    pub fn go_to_first_diff_hunk(&mut self, _: &GoToHunk, window: &mut Window, cx: &mut Context<Self>) {
+        self.hide_mouse_cursor(HideMouseCursorOrigin::MovementAction, cx);
+        let snapshot = self.snapshot(window, cx);
+        self.go_to_hunk_before_or_after_position(
+            &snapshot,
+            language::Point::new(0, 0),
             Direction::Next,
             true,
             window,
@@ -22128,7 +22142,8 @@ impl Editor {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Option<Entity<Self>> {
-        (minimap_settings.minimap_enabled() && self.buffer_kind(cx) == ItemBufferKind::Singleton)
+        // 允许单缓冲区和多缓冲区显示小地图（例如，项目差异视图）
+        minimap_settings.minimap_enabled()
             .then(|| self.initialize_new_minimap(minimap_settings, window, cx))
     }
 

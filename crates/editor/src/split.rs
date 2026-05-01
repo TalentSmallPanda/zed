@@ -506,7 +506,7 @@ impl SplittableEditor {
             editor.disable_runnables();
             editor.disable_inline_diagnostics();
             editor.disable_mouse_wheel_zoom();
-            editor.set_minimap_visibility(crate::MinimapVisibility::Disabled, window, cx);
+            // editor.set_minimap_visibility(crate::MinimapVisibility::Disabled, window, cx);
             editor.start_temporary_diff_override();
             editor
         });
@@ -602,7 +602,7 @@ impl SplittableEditor {
             editor.disable_runnables();
             editor.disable_diagnostics(cx);
             editor.disable_mouse_wheel_zoom();
-            editor.set_minimap_visibility(crate::MinimapVisibility::Disabled, window, cx);
+            // editor.set_minimap_visibility(crate::MinimapVisibility::Disabled, window, cx);
             editor
         });
 

@@ -5536,9 +5536,12 @@ impl GitPanel {
                 cx.listener(move |this, event: &ClickEvent, window, cx| {
                     this.selected_entry = Some(ix);
                     cx.notify();
+                    // 判断是双击 (click_count > 1) 双击
                     if event.click_count() > 1 || event.modifiers().secondary() {
+                        // 双击
                         this.open_file(&Default::default(), window, cx)
                     } else {
+                        // 单击
                         this.open_diff(&Default::default(), window, cx);
                         this.focus_handle.focus(window, cx);
                     }
