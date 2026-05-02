@@ -1210,6 +1210,7 @@ impl MultiBuffer {
         Self::new_(
             capability,
             MultiBufferSnapshot {
+                // todo - 控制并排diff header显隐
                 show_headers: true,
                 show_deleted_hunks: true,
                 ..MultiBufferSnapshot::default()

@@ -246,29 +246,29 @@ impl Render for BufferSearchBar {
                 (IconName::ChevronDownUp, "Collapse All Files")
             };
 
-            let collapse_expand_icon_button = |id| {
-                IconButton::new(id, icon)
-                    .icon_size(IconSize::Small)
-                    .tooltip(move |_, cx| {
-                        Tooltip::for_action_in(
-                            tooltip_label,
-                            &ToggleFoldAll,
-                            &query_editor_focus,
-                            cx,
-                        )
-                    })
-                    .on_click(cx.listener(|this, _: &ClickEvent, window, cx| {
-                        this.toggle_fold_all(&ToggleFoldAll, window, cx);
-                    }))
-            };
+            // let collapse_expand_icon_button = |id| {
+            //     IconButton::new(id, icon)
+            //         .icon_size(IconSize::Small)
+            //         .tooltip(move |_, cx| {
+            //             Tooltip::for_action_in(
+            //                 tooltip_label,
+            //                 &ToggleFoldAll,
+            //                 &query_editor_focus,
+            //                 cx,
+            //             )
+            //         })
+            //         .on_click(cx.listener(|this, _: &ClickEvent, window, cx| {
+            //             this.toggle_fold_all(&ToggleFoldAll, window, cx);
+            //         }))
+            // };
 
             if self.dismissed {
                 return h_flex()
                     .pl_0p5()
                     .gap_1()
-                    .child(collapse_expand_icon_button(
-                        "multibuffer-collapse-expand-empty",
-                    ))
+                    // .child(collapse_expand_icon_button(
+                    //     "multibuffer-collapse-expand-empty",
+                    // ))
                     .when(has_splittable_editor, |this| this.children(split_buttons))
                     .into_any_element();
             }
@@ -276,7 +276,7 @@ impl Render for BufferSearchBar {
             Some(
                 h_flex()
                     .gap_1()
-                    .child(collapse_expand_icon_button("multibuffer-collapse-expand"))
+                    // .child(collapse_expand_icon_button("multibuffer-collapse-expand"))
                     .children(split_buttons)
                     .into_any_element(),
             )
@@ -1075,6 +1075,7 @@ impl BufferSearchBar {
     // We provide an expand/collapse button if we are in a multibuffer
     // and not doing a project search.
     fn needs_expand_collapse_option(&self, cx: &App) -> bool {
+        // todo
         if let Some(item) = &self.active_searchable_item {
             let buffer_kind = item.buffer_kind(cx);
 

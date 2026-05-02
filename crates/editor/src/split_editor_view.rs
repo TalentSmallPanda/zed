@@ -229,6 +229,7 @@ impl RenderOnce for SplitEditorView {
                             .child(rhs),
                     ),
             )
+            // todo - 并排diff绘制header的地方
             .child(buffer_headers)
     }
 }

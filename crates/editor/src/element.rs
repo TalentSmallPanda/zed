@@ -8502,67 +8502,67 @@ pub(crate) fn render_buffer_header(
                 })
                 .bg(colors.editor_subheader_background)
                 .hover(|style| style.bg(colors.element_hover))
-                .map(|header| {
-                    let editor = editor.clone();
-                    let buffer_id = for_excerpt.buffer_id();
-                    let toggle_chevron_icon =
-                        FileIcons::get_chevron_icon(!is_folded, cx).map(Icon::from_path);
-                    let button_size = rems_from_px(28.);
+                // .map(|header| {
+                //     let editor = editor.clone();
+                //     let buffer_id = for_excerpt.buffer_id();
+                //     let toggle_chevron_icon =
+                //         FileIcons::get_chevron_icon(!is_folded, cx).map(Icon::from_path);
+                //     let button_size = rems_from_px(28.);
 
-                    header.child(
-                        div()
-                            .hover(|style| style.bg(colors.element_selected))
-                            .rounded_xs()
-                            .child(
-                                ButtonLike::new("toggle-buffer-fold")
-                                    .style(ButtonStyle::Transparent)
-                                    .height(button_size.into())
-                                    .width(button_size)
-                                    .children(toggle_chevron_icon)
-                                    .tooltip({
-                                        let focus_handle = focus_handle.clone();
-                                        let is_folded_for_tooltip = is_folded;
-                                        move |_window, cx| {
-                                            Tooltip::with_meta_in(
-                                                if is_folded_for_tooltip {
-                                                    "Unfold Excerpt"
-                                                } else {
-                                                    "Fold Excerpt"
-                                                },
-                                                Some(&ToggleFold),
-                                                format!(
-                                                    "{} to toggle all",
-                                                    text_for_keystroke(
-                                                        &Modifiers::alt(),
-                                                        "click",
-                                                        cx
-                                                    )
-                                                ),
-                                                &focus_handle,
-                                                cx,
-                                            )
-                                        }
-                                    })
-                                    .on_click(move |event, window, cx| {
-                                        if event.modifiers().alt {
-                                            editor.update(cx, |editor, cx| {
-                                                editor.toggle_fold_all(&ToggleFoldAll, window, cx);
-                                            });
-                                        } else {
-                                            if is_folded {
-                                                editor.update(cx, |editor, cx| {
-                                                    editor.unfold_buffer(buffer_id, cx);
-                                                });
-                                            } else {
-                                                editor.update(cx, |editor, cx| {
-                                                    editor.fold_buffer(buffer_id, cx);
-                                                });
-                                            }
-                                        }
-                                    }),
-                            ),
-                    )
-                })
+                //     header.child(
+                //         div()
+                //             .hover(|style| style.bg(colors.element_selected))
+                //             .rounded_xs()
+                //             .child(
+                //                 ButtonLike::new("toggle-buffer-fold")
+                //                     .style(ButtonStyle::Transparent)
+                //                     .height(button_size.into())
+                //                     .width(button_size)
+                //                     .children(toggle_chevron_icon)
+                //                     .tooltip({
+                //                         let focus_handle = focus_handle.clone();
+                //                         let is_folded_for_tooltip = is_folded;
+                //                         move |_window, cx| {
+                //                             Tooltip::with_meta_in(
+                //                                 if is_folded_for_tooltip {
+                //                                     "Unfold Excerpt"
+                //                                 } else {
+                //                                     "Fold Excerpt"
+                //                                 },
+                //                                 Some(&ToggleFold),
+                //                                 format!(
+                //                                     "{} to toggle all",
+                //                                     text_for_keystroke(
+                //                                         &Modifiers::alt(),
+                //                                         "click",
+                //                                         cx
+                //                                     )
+                //                                 ),
+                //                                 &focus_handle,
+                //                                 cx,
+                //                             )
+                //                         }
+                //                     })
+                //                     .on_click(move |event, window, cx| {
+                //                         if event.modifiers().alt {
+                //                             editor.update(cx, |editor, cx| {
+                //                                 editor.toggle_fold_all(&ToggleFoldAll, window, cx);
+                //                             });
+                //                         } else {
+                //                             // if is_folded {
+                //                             //     editor.update(cx, |editor, cx| {
+                //                             //         editor.unfold_buffer(buffer_id, cx);
+                //                             //     });
+                //                             // } else {
+                //                             //     editor.update(cx, |editor, cx| {
+                //                             //         editor.fold_buffer(buffer_id, cx);
+                //                             //     });
+                //                             // }
+                //                         }
+                //                     }),
+                //             ),
+                //     )
+                // })
                 .children(
                     editor_read
                         .addons
@@ -8687,7 +8687,7 @@ pub(crate) fn render_buffer_header(
                                         this.visible_on_hover("buffer-header-group")
                                     })
                                     .child(
-                                        Button::new("open-file-button", "Open File")
+                                        Button::new("open-file-button", "Open File 1")
                                             .style(ButtonStyle::OutlinedGhost)
                                             .when(is_selected, |this| {
                                                 this.key_binding(KeyBinding::for_action_in(
@@ -8724,11 +8724,11 @@ pub(crate) fn render_buffer_header(
                                     return;
                                 }
 
-                                if is_folded {
-                                    editor.unfold_buffer(buffer_id, cx);
-                                } else {
-                                    editor.fold_buffer(buffer_id, cx);
-                                }
+                                // if is_folded {
+                                //     editor.unfold_buffer(buffer_id, cx);
+                                // } else {
+                                //     editor.fold_buffer(buffer_id, cx);
+                                // }
                             }
                         })),
                 ),
