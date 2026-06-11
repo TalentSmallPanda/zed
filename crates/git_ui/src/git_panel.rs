@@ -6272,13 +6272,14 @@ impl GitPanel {
                     ),
             )
             .on_click({
+                // git左侧侧边栏click事件
                 cx.listener(move |this, event: &ClickEvent, window, cx| {
                     this.selected_entry = Some(ix);
                     cx.notify();
                     if event.modifiers().secondary() {
-                        this.open_solo_diff(&Default::default(), window, cx)
+                        this.open_diff(&Default::default(), window, cx)
                     } else {
-                        this.open_diff(&Default::default(), window, cx);
+                        this.open_solo_diff(&Default::default(), window, cx);
                         this.focus_handle.focus(window, cx);
                     }
                 })

@@ -8327,7 +8327,7 @@ impl Editor {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Option<Entity<Self>> {
-        (minimap_settings.minimap_enabled() && self.buffer_kind(cx) == ItemBufferKind::Singleton)
+        (minimap_settings.minimap_enabled())
             .then(|| self.initialize_new_minimap(minimap_settings, window, cx))
     }
 
