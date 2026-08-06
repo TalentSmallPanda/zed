@@ -15,8 +15,8 @@ use gpui::{
     Action, AnyElement, App, AppContext as _, Context, Empty, Entity, EventEmitter, FocusHandle,
     Focusable, HighlightStyle, IntoElement, Render, Subscription, Task, WeakEntity, Window,
 };
-use language::{Anchor, Buffer, HighlightedText, OffsetRangeExt as _, Point};
-use multi_buffer::{MultiBuffer, PathKey, excerpt_context_lines};
+use language::{Buffer, HighlightedText};
+use multi_buffer::{MultiBuffer, PathKey};
 use project::{
     Project,
     git_store::{Repository, RepositoryId},
@@ -191,46 +191,11 @@ impl SoloDiffView {
         showing_full_file: bool,
         cx: &mut Context<MultiBuffer>,
     ) -> MultiBuffer {
-        let (ranges, context_line_count) =
-            Self::excerpt_ranges(&buffer, &diff, showing_full_file, cx);
-
-        let mut multibuffer = MultiBuffer::without_headers(buffer.read(cx).capability());
-        multibuffer.set_excerpts_for_buffer(buffer, ranges, context_line_count, cx);
+        // 使用 singleton 模式以获得完整的导航体验
+        let mut multibuffer = MultiBuffer::singleton(buffer.clone(), cx);
         multibuffer.add_diff(diff, cx);
+        multibuffer.set_all_diff_hunks_expanded(cx);
         multibuffer
-    }
-
-    fn excerpt_ranges(
-        buffer: &Entity<Buffer>,
-        diff: &Entity<buffer_diff::BufferDiff>,
-        showing_full_file: bool,
-        cx: &App,
-    ) -> (Vec<Range<Point>>, u32) {
-        if showing_full_file {
-            (vec![Point::zero()..buffer.read(cx).max_point()], 0)
-        } else {
-            (
-                Self::hunk_ranges(buffer, diff, cx),
-                excerpt_context_lines(cx),
-            )
-        }
-    }
-
-    fn hunk_ranges(
-        buffer: &Entity<Buffer>,
-        diff: &Entity<buffer_diff::BufferDiff>,
-        cx: &App,
-    ) -> Vec<Range<Point>> {
-        let buffer = buffer.read(cx);
-        diff.read(cx)
-            .snapshot(cx)
-            .hunks_intersecting_range(
-                Anchor::min_for_buffer(buffer.remote_id())
-                    ..Anchor::max_for_buffer(buffer.remote_id()),
-                buffer,
-            )
-            .map(|diff_hunk| diff_hunk.buffer_range.to_point(buffer))
-            .collect()
     }
 
     fn set_showing_full_file(&mut self, showing_full_file: bool, cx: &mut Context<Self>) {
@@ -238,20 +203,9 @@ impl SoloDiffView {
             return;
         }
 
-        let (ranges, context_line_count) =
-            Self::excerpt_ranges(&self.buffer, &self.diff, showing_full_file, cx);
-
+        // 使用 singleton 模式后，文件始终完整显示
+        // 只需要更新滚动条标记的允许状态
         self.editor.update(cx, |editor, cx| {
-            let path = PathKey::for_buffer(&self.buffer, cx);
-            editor.remove_excerpts_for_path(path.clone(), cx);
-            editor.update_excerpts_for_path(
-                path,
-                self.buffer.clone(),
-                ranges,
-                context_line_count,
-                self.diff.clone(),
-                cx,
-            );
             editor.rhs_editor().update(cx, |editor, cx| {
                 editor.set_allow_git_diff_scrollbar_markers(showing_full_file, cx);
             });

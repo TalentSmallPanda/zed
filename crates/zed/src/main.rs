@@ -1,5 +1,5 @@
-// Disable command line from opening on release mode
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+// Disable command line from opening (always use windows subsystem)
+#![windows_subsystem = "windows"]
 
 mod reliability;
 mod zed;
