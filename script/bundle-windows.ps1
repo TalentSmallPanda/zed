@@ -41,7 +41,14 @@ function Get-VSArch {
 }
 
 Push-Location
-& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\Launch-VsDevShell.ps1" -Arch (Get-VSArch -Arch $Architecture) -HostArch (Get-VSArch -Arch $OSArchitecture)
+# Modified for VS 2026 BuildTools on D: drive
+$vsDevShellPath = "D:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\Common7\Tools\Launch-VsDevShell.ps1"
+if (Test-Path $vsDevShellPath) {
+    & $vsDevShellPath -Arch (Get-VSArch -Arch $Architecture) -HostArch (Get-VSArch -Arch $OSArchitecture)
+} else {
+    Write-Error "VS Dev Shell not found at: $vsDevShellPath"
+    exit 1
+}
 Pop-Location
 
 $target = "$Architecture-pc-windows-msvc"
@@ -233,11 +240,14 @@ function DownloadAMDGpuServices {
 }
 
 function DownloadConpty {
-    # TODO: Switch back to the stable channel once Microsoft finally decides to publish v1.26
     $url = "https://github.com/microsoft/terminal/releases/download/v1.25.1912.0/Microsoft.Windows.Console.ConPTY.1.25.260710002-preview.nupkg"
     $zipPath = ".\Microsoft.Windows.Console.ConPTY.1.25.260710002-preview.nupkg"
+    $tempZipPath = ".\Microsoft.Windows.Console.ConPTY.1.25.260710002-preview.zip"
     Invoke-WebRequest -Uri $url -OutFile $zipPath
-    Expand-Archive -Path $zipPath -DestinationPath ".\conpty" -Force
+    # .nupkg is actually a zip file, rename it to .zip for Expand-Archive
+    Rename-Item -Path $zipPath -NewName $tempZipPath -Force
+    Expand-Archive -Path $tempZipPath -DestinationPath ".\conpty" -Force
+    Remove-Item -Path $tempZipPath -Force
 }
 
 function CollectFiles {
@@ -326,10 +336,15 @@ function BuildInstaller {
         }
     }
 
-    # Windows runner 2022 default has iscc in PATH, https://github.com/actions/runner-images/blob/main/images/windows/Windows2022-Readme.md
-    # Currently, we are using Windows 2022 runner.
-    # Windows runner 2025 doesn't have iscc in PATH for now, https://github.com/actions/runner-images/issues/11228
-    $innoSetupPath = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+    # Modified for local Inno Setup installation
+    # Default path: C:\Program Files (x86)\Inno Setup 6\ISCC.exe
+    # Your path: C:\Users\05637\AppData\Local\Programs\Inno Setup 6\ISCC.exe
+    $innoSetupPath = "C:\Users\05637\AppData\Local\Programs\Inno Setup 6\ISCC.exe"
+    if (-not (Test-Path $innoSetupPath)) {
+        Write-Error "Inno Setup not found at: $innoSetupPath"
+        Write-Output "Please install Inno Setup 6 or update the path in bundle-windows.ps1"
+        exit 1
+    }
 
     $definitions = @{
         "AppId"          = $appId
