@@ -117,7 +117,7 @@ function PrepareForBundle {
 }
 
 function GenerateLicenses {
-    . $PSScriptRoot/generate-licenses.ps1
+    # . $PSScriptRoot/generate-licenses.ps1
 }
 
 function BuildZedAndItsFriends {
@@ -399,7 +399,7 @@ $debugStoreKey = "$env:ZED_RELEASE_CHANNEL/zed-$env:RELEASE_VERSION-$env:ZED_REL
 
 CheckEnvironmentVariables
 PrepareForBundle
-GenerateLicenses
+# GenerateLicenses
 BuildZedAndItsFriends
 BuildRemoteServer
 MakeAppx

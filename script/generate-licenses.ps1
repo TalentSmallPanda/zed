@@ -8,6 +8,13 @@ if ($args[0]) {
     $outputFile = "$(Get-Location)/assets/licenses.md"
 }
 $templateFile="script/licenses/template.md.hbs"
+ 
+if (Test-Path "$outputFile" -PathType Leaf) {
+    if ((Get-Item "$outputFile").Length -gt 0) {
+        Write-Host "Licenses already exist ($outputFile), skipping generation."
+        return
+    }
+}
 
 New-Item -Path "$outputFile" -ItemType File -Value "" -Force
 
