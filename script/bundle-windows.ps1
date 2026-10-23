@@ -117,7 +117,7 @@ function PrepareForBundle {
 }
 
 function GenerateLicenses {
-    . $PSScriptRoot/generate-licenses.ps1
+    # . $PSScriptRoot/generate-licenses.ps1
 }
 
 function BuildZedAndItsFriends {
@@ -233,8 +233,13 @@ function DownloadAMDGpuServices {
     # If you update the AGS SDK version, please also update the version in `crates/gpui/src/platform/windows/directx_renderer.rs`
     $url = "https://codeload.github.com/GPUOpen-LibrariesAndSDKs/AGS_SDK/zip/refs/tags/v6.3.0"
     $zipPath = ".\AGS_SDK_v6.3.0.zip"
-    # Download the AGS SDK zip file
-    Invoke-WebRequest -Uri $url -OutFile $zipPath
+    # Skip download if the zip already exists
+    if (-not (Test-Path $zipPath)) {
+        Write-Host "Downloading AGS SDK..."
+        Invoke-WebRequest -Uri $url -OutFile $zipPath
+    } else {
+        Write-Host "AGS SDK zip already exists, skipping download."
+    }
     # Extract the AGS SDK zip file
     Expand-Archive -Path $zipPath -DestinationPath "." -Force
 }
@@ -243,9 +248,15 @@ function DownloadConpty {
     $url = "https://github.com/microsoft/terminal/releases/download/v1.25.1912.0/Microsoft.Windows.Console.ConPTY.1.25.260710002-preview.nupkg"
     $zipPath = ".\Microsoft.Windows.Console.ConPTY.1.25.260710002-preview.nupkg"
     $tempZipPath = ".\Microsoft.Windows.Console.ConPTY.1.25.260710002-preview.zip"
-    Invoke-WebRequest -Uri $url -OutFile $zipPath
-    # .nupkg is actually a zip file, rename it to .zip for Expand-Archive
-    Rename-Item -Path $zipPath -NewName $tempZipPath -Force
+    # Skip download if the nupkg already exists
+    if (-not (Test-Path $zipPath)) {
+        Write-Host "Downloading ConPTY..."
+        Invoke-WebRequest -Uri $url -OutFile $zipPath
+    } else {
+        Write-Host "ConPTY nupkg already exists, skipping download."
+    }
+    # .nupkg is actually a zip file, copy it to .zip for Expand-Archive (keep the original nupkg for reuse)
+    Copy-Item -Path $zipPath -DestinationPath $tempZipPath -Force
     Expand-Archive -Path $tempZipPath -DestinationPath ".\conpty" -Force
     Remove-Item -Path $tempZipPath -Force
 }
@@ -399,7 +410,7 @@ $debugStoreKey = "$env:ZED_RELEASE_CHANNEL/zed-$env:RELEASE_VERSION-$env:ZED_REL
 
 CheckEnvironmentVariables
 PrepareForBundle
-GenerateLicenses
+# GenerateLicenses
 BuildZedAndItsFriends
 BuildRemoteServer
 MakeAppx
