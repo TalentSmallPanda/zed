@@ -76,7 +76,7 @@ jobs:
           - arch: x86_64
             runner: ubuntu-22.04
           - arch: aarch64
-            runner: ubuntu-22.04-arm
+            runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 300
     env:
