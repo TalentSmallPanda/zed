@@ -939,7 +939,7 @@ impl Render for DiffMultibuffer {
                     .upgrade()
                     .and_then(|workspace| workspace.read(cx).panel::<GitPanel>(cx))
                 {
-                    panel.update(cx, |panel, cx| panel.render_remote_button(cx))
+                    panel.read(cx).render_remote_button(cx)
                 } else {
                     None
                 };

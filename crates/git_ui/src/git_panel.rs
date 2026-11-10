@@ -7272,7 +7272,7 @@ impl GitPanel {
         )
     }
 
-    pub(crate) fn render_remote_button(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+    pub(crate) fn render_remote_button(&self, cx: &App) -> Option<AnyElement> {
         let branch = self.active_repository.as_ref()?.read(cx).branch.clone();
         if !self.can_push_and_pull(cx) {
             return None;
@@ -10448,7 +10448,7 @@ impl RenderOnce for PanelRepoFooter {
                     .child(div().child(branch_selector).min_w_0()),
             )
             .children(if let Some(git_panel) = self.git_panel {
-                git_panel.update(cx, |git_panel, cx| git_panel.render_remote_button(cx))
+                git_panel.read(cx).render_remote_button(cx)
             } else {
                 None
             })
