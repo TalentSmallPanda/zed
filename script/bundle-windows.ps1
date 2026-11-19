@@ -41,7 +41,7 @@ function Get-VSArch {
 }
 
 Push-Location
-& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\Launch-VsDevShell.ps1" -Arch (Get-VSArch -Arch $Architecture) -HostArch (Get-VSArch -Arch $OSArchitecture)
+& "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\Launch-VsDevShell.ps1" -Arch (Get-VSArch -Arch $Architecture) -HostArch (Get-VSArch -Arch $OSArchitecture)
 Pop-Location
 
 $target = "$Architecture-pc-windows-msvc"
@@ -107,10 +107,6 @@ function PrepareForBundle {
     New-Item -Path "$innoDir\tools" -ItemType Directory -Force
 
     rustup target add $target
-}
-
-function GenerateLicenses {
-    . $PSScriptRoot/generate-licenses.ps1
 }
 
 function BuildZedAndItsFriends {
@@ -386,7 +382,6 @@ $debugStoreKey = "$env:ZED_RELEASE_CHANNEL/zed-$env:RELEASE_VERSION-$env:ZED_REL
 
 CheckEnvironmentVariables
 PrepareForBundle
-GenerateLicenses
 BuildZedAndItsFriends
 BuildRemoteServer
 MakeAppx

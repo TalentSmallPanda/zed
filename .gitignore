@@ -62,3 +62,7 @@ crates/docs_preprocessor/actions.json
 
 .local*
 .cache
+
+# Windows bundle temporary files
+/.workbuddy
+/.codebuddy
