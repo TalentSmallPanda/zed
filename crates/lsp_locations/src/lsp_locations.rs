@@ -708,6 +708,10 @@ impl PickerDelegate for LspLocationsDelegate {
         false
     }
 
+    fn double_click_to_confirm(&self) -> bool {
+        true
+    }
+
     fn set_selected_index(
         &mut self,
         ix: usize,
