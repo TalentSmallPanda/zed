@@ -25,6 +25,7 @@ use std::{
     },
     ffi::OsStr,
     ffi::OsString,
+    ops::Deref,
     path::{Path, PathBuf},
     sync::Arc,
     time::{Duration, SystemTime},
@@ -109,16 +110,6 @@ actions!(
     ]
 );
 
-#[derive(Serialize, Debug)]
-pub struct AssetQuery<'a> {
-    asset: &'a str,
-    os: &'a str,
-    arch: &'a str,
-    metrics_id: Option<&'a str>,
-    system_id: Option<&'a str>,
-    is_staff: Option<bool>,
-}
-
 #[derive(Clone, Debug)]
 pub enum AutoUpdateStatus {
     Idle,
@@ -187,6 +178,26 @@ pub struct AutoUpdater {
     update_check_type: UpdateCheckType,
     _wake_subscription: gpui::Subscription,
     dismissed_status: Option<AutoUpdateStatus>,
+}
+
+const GITHUB_RELEASES_REPO: &str = "TalentSmallPanda/zed";
+
+fn github_asset_name(asset: &str, os: &str, arch: &str) -> Result<String> {
+    let name = match (asset, os, arch) {
+        ("zed", "macos", "aarch64") => "Zed-aarch64.dmg".to_string(),
+        ("zed", "macos", "x86_64") => "Zed-x86_64.dmg".to_string(),
+        ("zed", "linux", "x86_64") => "zed-linux-x86_64.tar.gz".to_string(),
+        ("zed", "linux", "aarch64") => "zed-linux-aarch64.tar.gz".to_string(),
+        ("zed", "windows", "x86_64") => "Zed-x86_64.exe".to_string(),
+        ("zed", "windows", "aarch64") => "Zed-aarch64.exe".to_string(),
+        ("zed-remote-server", "macos", arch) => format!("zed-remote-server-macos-{arch}.gz"),
+        ("zed-remote-server", "linux", arch) => format!("zed-remote-server-linux-{arch}.gz"),
+        ("zed-remote-server", "windows", arch) => {
+            format!("zed-remote-server-windows-{arch}.zip")
+        }
+        _ => anyhow::bail!("unsupported release asset {asset} for {os}-{arch}"),
+    };
+    Ok(name)
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -351,14 +362,14 @@ pub fn release_notes_url(cx: &mut App) -> Option<String> {
             let mut current_version = auto_updater.current_version.clone();
             current_version.pre = semver::Prerelease::EMPTY;
             current_version.build = semver::BuildMetadata::EMPTY;
-            let release_channel = release_channel.dev_name();
-            let path = format!("/releases/{release_channel}/{current_version}");
-            auto_updater.client.http_client().build_url(&path)
+            format!(
+                "https://github.com/{GITHUB_RELEASES_REPO}/releases/tag/v{current_version}"
+            )
         }
         ReleaseChannel::Nightly => {
-            "https://github.com/zed-industries/zed/commits/nightly/".to_string()
+            "https://github.com/TalentSmallPanda/zed/commits/nightly/".to_string()
         }
-        ReleaseChannel::Dev => "https://github.com/zed-industries/zed/commits/main/".to_string(),
+        ReleaseChannel::Dev => "https://github.com/TalentSmallPanda/zed/commits/main/".to_string(),
     };
     Some(url)
 }
@@ -676,7 +687,7 @@ impl AutoUpdater {
 
     async fn get_release_asset(
         this: &Entity<Self>,
-        release_channel: ReleaseChannel,
+        _release_channel: ReleaseChannel,
         version: Option<Version>,
         asset: &str,
         os: &str,
@@ -684,56 +695,39 @@ impl AutoUpdater {
         cx: &mut AsyncApp,
     ) -> Result<ReleaseAsset> {
         let client = this.read_with(cx, |this, _| this.client.clone());
-
-        let (system_id, metrics_id, is_staff) = if client.telemetry().metrics_enabled() {
-            (
-                client.telemetry().system_id(),
-                client.telemetry().metrics_id(),
-                client.telemetry().is_staff(),
-            )
-        } else {
-            (None, None, None)
-        };
-
-        let version = if let Some(mut version) = version {
-            version.pre = semver::Prerelease::EMPTY;
-            version.build = semver::BuildMetadata::EMPTY;
-            version.to_string()
-        } else {
-            "latest".to_string()
-        };
         let http_client = client.http_client();
+        let http: Arc<dyn HttpClient> = http_client.deref().deref().deref().clone();
+        let asset_name = github_asset_name(asset, os, arch)?;
 
-        let path = format!("/releases/{}/{}/asset", release_channel.dev_name(), version,);
-        let url = http_client.build_zed_cloud_url_with_query(
-            &path,
-            AssetQuery {
-                os,
-                arch,
-                asset,
-                metrics_id: metrics_id.as_deref(),
-                system_id: system_id.as_deref(),
-                is_staff,
-            },
-        )?;
+        let release = match version {
+            Some(version) => {
+                let mut version = version;
+                version.pre = semver::Prerelease::EMPTY;
+                version.build = semver::BuildMetadata::EMPTY;
+                github_releases::get_release_by_tag_name(
+                    GITHUB_RELEASES_REPO,
+                    &format!("v{version}"),
+                    http,
+                )
+                .await?
+            }
+            None => {
+                github_releases::latest_github_release(GITHUB_RELEASES_REPO, true, false, http)
+                    .await?
+            }
+        };
 
-        let mut response = http_client
-            .get(url.as_str(), Default::default(), true)
-            .await?;
-        let mut body = Vec::new();
-        response.body_mut().read_to_end(&mut body).await?;
+        let asset = release
+            .assets
+            .into_iter()
+            .find(|asset| asset.name == asset_name)
+            .with_context(|| {
+                format!("release {} has no asset {asset_name}", release.tag_name)
+            })?;
 
-        anyhow::ensure!(
-            response.status().is_success(),
-            "failed to fetch release: {:?}",
-            String::from_utf8_lossy(&body),
-        );
-
-        serde_json::from_slice(body.as_slice()).with_context(|| {
-            format!(
-                "error deserializing release {:?}",
-                String::from_utf8_lossy(&body),
-            )
+        Ok(ReleaseAsset {
+            version: release.tag_name.trim_start_matches('v').to_string(),
+            url: asset.browser_download_url,
         })
     }
 
@@ -1415,20 +1409,22 @@ mod tests {
             let clock = Arc::new(FakeSystemClock::new());
             let release_available = Arc::clone(&release_available);
             let dmg_rx = Arc::new(parking_lot::Mutex::new(Some(dmg_rx)));
+            let asset_name = github_asset_name("zed", OS, ARCH).unwrap();
             let fake_client_http = FakeHttpClient::create(move |req| {
                 let release_available = release_available.load(atomic::Ordering::Relaxed);
                 let dmg_rx = dmg_rx.clone();
+                let asset_name = asset_name.clone();
                 async move {
-                if req.uri().path() == "/releases/stable/latest/asset" {
-                    if release_available {
-                        return Ok(Response::builder().status(200).body(
-                            r#"{"version":"0.100.1","url":"https://test.example/new-download"}"#.into()
-                        ).unwrap());
+                if req.uri().path() == "/repos/TalentSmallPanda/zed/releases" {
+                    let (tag, url) = if release_available {
+                        ("v0.100.1", "https://test.example/new-download")
                     } else {
-                        return Ok(Response::builder().status(200).body(
-                            r#"{"version":"0.100.0","url":"https://test.example/old-download"}"#.into()
-                        ).unwrap());
-                    }
+                        ("v0.100.0", "https://test.example/old-download")
+                    };
+                    let body = format!(
+                        r#"[{{"tag_name":"{tag}","prerelease":false,"assets":[{{"name":"{asset_name}","browser_download_url":"{url}"}}],"tarball_url":"","zipball_url":""}}]"#
+                    );
+                    return Ok(Response::builder().status(200).body(body.into()).unwrap());
                 } else if req.uri().path() == "/new-download" {
                     return Ok(Response::builder().status(200).body({
                         let dmg_rx = dmg_rx.lock().take().unwrap();
